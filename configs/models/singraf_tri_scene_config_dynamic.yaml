@@ -1,0 +1,83 @@
+data_config:
+  dataset: 'scene'
+  data_dir: 'data/replica/frl_apartment'
+  data_fov: 90
+  data_res: 512
+  num_workers: 4
+  batch_size: 16
+  img_res: 256
+  train_set_config:
+    split: 'trainx5'
+  val_set_config:
+    split: 'trainx5'  # eval on same distribution as training
+    samples_per_epoch: 500
+
+model_config:
+  target: models.gsn.SinGRAF
+  params:
+    img_res: ???  # tied to img_res defined by data_config
+    patch_size: 64  # added for inference without upsampling
+    lr: 0.002
+    ttur_ratio: 1.0  # controls ratio between G and D lr, where g_lr = lr and d_lr = lr * ttur_ratio
+    voxel_res: 256
+    voxel_size: 0.075
+    opt_pose: True
+    jitter: True
+    t_jitter: 0.3
+    r_jitter: 45.
+
+    decoder_config:
+      target: models.generator.StyleGenerator2D
+      params:
+        out_res: ???  # defined by voxel_res
+        out_ch: 96  # 32 x 3 (Triplane)
+        z_dim: 128
+        ch_mul: 1
+        ch_max: 256
+        skip_conn: False
+
+    generator_config:
+      target: models.generator.TriplaneGenerator
+      params:
+        img_res: ???  # set by data config img_res
+        feature_nerf: False
+        global_feat_res: ???  # defined by voxel_res
+        coordinate_scale: ???  # defined by voxel_res and voxel_size
+        alpha_activation: 'softplus'
+        hierarchical_sampling: False
+        density_bias: 0
+        nerf_out_res: 64
+        samples_per_ray: 96
+        near: 0
+        far: 12
+        alpha_noise_std: 0
+
+        nerf_mlp_config:
+          target: models.generator.NerfFeatureNoDirGenerator
+          params:
+            n_layers: 2
+            channels: 64
+            out_channel: 3
+            z_dim: ???  # defined by out_ch of the decoder
+
+    loss_config:
+      target: models.losses.SinGRAFLoss
+      params:
+        disc_loss: 'logistic'
+        scale_disc: True  # without use_upsampling (feature_nerf False case)
+        scale_level: [0.8, 0.25]  # possible max and min scale range during entire training
+        scale_range: [0.2, 0.3]  # scale range variation for random sampling
+        scale_epoch: 100  # training period to change scale sampling range, ex. 0.6~0.8 (range variation 0.2) at 0 epoch -> 0.25~0.55 (range variation 0.3) at 100 epoch
+        scale_perspective: [0, 15]  # linearlly increasing from 0 to 15 degree
+        recon_weight: 50
+        r1_weight: 0.5
+        d_reg_every: 16
+        aug_policy: 'translation,color,cutout'
+
+        discriminator_config:
+          target: models.discriminator.StyleDiscriminator
+          params:
+            in_channel: ???  # depends on options
+            in_res: ???
+            ch_mul: 64
+            ch_max: 512
